@@ -54,8 +54,7 @@ update_freebsd() {
   echo "Detected FreeBSD."
   need_cmd sudo
   echo "Updating FreeBSD base system..."
-  sudo freebsd-update fetch
-  sudo freebsd-update install
+  sudo freebsd-update fetch install
   echo "Updating packages..."
   sudo pkg update
   sudo pkg upgrade -y
