@@ -55,7 +55,5 @@ echo "Adding /usr/local/lib64 to library path..."
 echo "/usr/local/lib64" | sudo tee /etc/ld.so.conf.d/local-lib64.conf > /dev/null || handle_error "Failed to modify library path."
 sudo ldconfig || handle_error "Failed to reload library configuration."
 
-./setup-groups.sh
-
 # Completion message
 echo "All tools installed and configured successfully. Please log out and log back in for group changes to take effect."
