@@ -29,20 +29,21 @@ declare -A software=(
 install_jetbrains_toolbox() {
     echo "Installing JetBrains Toolbox..."
 
-    # Ensure jq is installed
-    if ! command -v jq &> /dev/null; then
-        echo "jq is not installed. Installing jq..."
-        sudo apt install -y jq || handle_error "Failed to install jq."
-    fi
+    # Ensure dependencies are installed
+    for cmd in curl jq tar; do
+        if ! command -v "$cmd" &> /dev/null; then
+            echo "$cmd is not installed. Installing $cmd..."
+            sudo apt update -y || handle_error "Failed to apt update."
+            sudo apt install -y "$cmd" || handle_error "Failed to install $cmd."
+        fi
+    done
 
     # Fetch the JSON data
-    json_data=$(curl -s https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release)
-    if [ -z "$json_data" ]; then
-        handle_error "Failed to fetch JSON data from JetBrains API."
-    fi
+    json_data="$(curl -fsSL 'https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release')" \
+        || handle_error "Failed to fetch JSON data from JetBrains API."
 
     # Parse the JSON to get the latest Linux download link
-    latest_url=$(echo "$json_data" | jq -r '.TBA[0].downloads.linux.link')
+    latest_url="$(echo "$json_data" | jq -r '.TBA[0].downloads.linux.link // empty')"
 
     # Validate the URL
     if [[ -z "$latest_url" || ! "$latest_url" =~ ^https:// ]]; then
@@ -51,13 +52,45 @@ install_jetbrains_toolbox() {
     fi
 
     echo "Latest JetBrains Toolbox URL: $latest_url"
-    wget -O jetbrains-toolbox.tar.gz "$latest_url" || handle_error "Failed to download JetBrains Toolbox."
-    tar -xvf jetbrains-toolbox.tar.gz || handle_error "Failed to extract JetBrains Toolbox."
-    mkdir -p ~/.local/bin || handle_error "Failed to create local bin directory."
-    mv jetbrains-toolbox-*/jetbrains-toolbox ~/.local/bin/ || handle_error "Failed to move JetBrains Toolbox to local bin."
-    rm -rf jetbrains-toolbox*.* || handle_error "Failed to clean up JetBrains Toolbox temporary files."
-    echo "JetBrains Toolbox installed. You can run it from ~/.local/bin/jetbrains-toolbox."
+
+    # Work in a temp directory
+    tmpdir="$(mktemp -d)" || handle_error "Failed to create temp directory."
+    trap 'rm -rf "$tmpdir"' RETURN
+
+    # Download & extract
+    archive="$tmpdir/jetbrains-toolbox.tar.gz"
+    curl -fL "$latest_url" -o "$archive" || handle_error "Failed to download JetBrains Toolbox."
+
+    tar -xzf "$archive" -C "$tmpdir" || handle_error "Failed to extract JetBrains Toolbox."
+
+    # Find extracted directory
+    extracted_dir="$(find "$tmpdir" -maxdepth 1 -type d -name 'jetbrains-toolbox-*' | head -n 1)"
+    [[ -n "$extracted_dir" ]] || handle_error "Could not find extracted jetbrains-toolbox directory."
+
+    # Install location: keep the full directory
+    install_root="$HOME/.local/share/JetBrains"
+    install_dir="$install_root/Toolbox"
+    mkdir -p "$install_root" || handle_error "Failed to create $install_root."
+
+    # Replace any existing install
+    rm -rf "$install_dir" || handle_error "Failed to remove existing Toolbox install."
+    mv "$extracted_dir" "$install_dir" || handle_error "Failed to move Toolbox into $install_dir."
+
+    # Ensure local bin exists
+    mkdir -p "$HOME/.local/bin" || handle_error "Failed to create ~/.local/bin."
+
+    # Symlink the launcher into ~/.local/bin
+    launcher="$install_dir/bin/jetbrains-toolbox"
+    [[ -x "$launcher" ]] || handle_error "Toolbox launcher not found or not executable at: $launcher"
+
+    ln -sf "$launcher" "$HOME/.local/bin/jetbrains-toolbox" \
+        || handle_error "Failed to create symlink in ~/.local/bin."
+
+    echo "JetBrains Toolbox installed."
+    echo "Run it with: ~/.local/bin/jetbrains-toolbox"
+    echo "If that command is not found, ensure ~/.local/bin is in your PATH."
 }
+
 
 install_discord() {
     echo "Installing Discord..."
