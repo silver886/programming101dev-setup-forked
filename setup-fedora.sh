@@ -30,7 +30,7 @@ packages=(
     nmap
     obs-studio
     pari-gp
-    pax
+    spax
     strace
     tmux
     wireshark
